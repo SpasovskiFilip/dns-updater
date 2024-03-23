@@ -44,10 +44,10 @@ Example configuration for `domains.json`:
             "domains":
             [
                 {
-                    "name": "example1.tuxhub.cloud"
+                    "name": "subdomain1.example.com"
                 },
                 {
-                    "name": "example2.tuxhub.cloud"
+                    "name": "subdomain2.example.com"
                 }
 
             ]
@@ -57,10 +57,10 @@ Example configuration for `domains.json`:
             "domains":
             [
                 {
-                    "name": "sub1.hubtux.cloud"
+                    "name": "subdomain1.other-example.com"
                 },
                 {
-                    "name": "sub2.hubtux.cloud"
+                    "name": "subdomain2.other-example.com"
                 }
 
             ]
