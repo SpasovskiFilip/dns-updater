@@ -104,6 +104,10 @@ docker run -d --name dns-updater -v /path/to/local/main.py:/app/main.py --restar
 
 This will run the container in detached mode and ensure it starts automatically when the server restarts, unless you explicitly stop it.
 
+### Docker Compose
+You could also use docker-compose to build the project, with a local image or by pulling an external image. (modify to docker-compose.yml if you want to pull from an external image). The script in the container will use the environment variables.
+To build and run the image as a container run `docker compose up` (or `docker compose up -d` to run it detached as a background process).
+
 ## Tutorial
 ### 🔑 How to create and get an API Token from Cloudflare
 1. Log in to your Cloudflare account.
