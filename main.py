@@ -310,6 +310,90 @@ def is_connected():
     return False
 
 
+def get_all_dns_records():
+    """Function to get the DNS recordsfrom a file or by zone"""
+    domain_records = []
+
+    if DNS_RECORD_COMMENT_KEY is not None:
+        LOGGER.info(
+            "Using DNS_RECORD_COMMENT_KEY='%s' to find DNS records to update.",
+            DNS_RECORD_COMMENT_KEY,
+        )
+        domain_records = get_dns_records_by_comment(CF_ZONE_ID, DNS_RECORD_COMMENT_KEY)
+    else:
+        LOGGER.info(
+            "Using DOMAINS_FILE_PATH='%s' to find DNS records to update.",
+            DOMAINS_FILE_PATH,
+        )
+        domain_records = get_dns_records_by_name(
+            read_zones_from_file(DOMAINS_FILE_PATH, CF_ZONE_ID)
+        )
+    return domain_records
+
+
+def check_and_update_dns_record_type(record, domain_name):
+    """Function to check the TYPE env variable and update the domain type"""
+    if TYPE is not None:
+        if TYPE != record["type"] and TYPE in ["A", "AAAA", "CNAME"]:
+            update_dns_record_type(record, TYPE)
+        if TYPE not in ["A", "AAAA", "CNAME"] and PROXIED is True:
+            LOGGER.info(
+                "Type settings are the same for %s. No update needed.",
+                domain_name,
+            )
+        else:
+            LOGGER.info(
+                "Type settings are the same for %s. No update needed.",
+                domain_name,
+            )
+    else:
+        LOGGER.error(
+            "Environment variable %s is not defined.", nameof(TYPE)
+        )
+
+
+def check_and_update_dns_record_proxy(record, domain_name):
+    """Function to check the PROXIED env variable and update the domain proxy"""
+    if PROXIED is not None:
+        if record["proxiable"] is True and PROXIED != record["proxied"]:
+            update_dns_record_proxy(record, PROXIED)
+        else:
+            if record["proxiable"] is False and PROXIED is True:
+                LOGGER.error(
+                    "Domain %s is not proxiable.", domain_name
+                )
+            if record["proxiable"] is True and PROXIED == record["proxied"]:
+                LOGGER.info(
+                    "Proxy settings are the same for %s. No update needed.", domain_name
+                )
+    else:
+        LOGGER.error(
+            "Environment variable %s is not defined.", nameof(PROXIED)
+        )
+
+
+def check_and_update_dns_record_ttl(record, domain_name):
+    """Function to check the TTL env variable and update the domain ttl"""
+    if TTL is not None:
+        if TTL != record["ttl"] and PROXIED is False:
+            update_dns_record_ttl(record, TTL)
+        else:
+            if PROXIED is True:
+                LOGGER.info(
+                    "TTL settings cannot be set for %s. Proxy status is set to True.",
+                    domain_name,
+                )
+            if TTL == record["ttl"]:
+                LOGGER.info(
+                    "TTL settings are the same for %s. No update needed.",
+                    domain_name,
+                )
+    else:
+        LOGGER.error(
+            "Environment variable %s is not defined.", nameof(TTL)
+        )
+
+
 def check_and_update_dns():
     """Function to run the check and update process"""
     LOGGER.info("Run triggered by schedule.")
@@ -334,22 +418,7 @@ def check_and_update_dns():
         return
 
     public_ip = get_public_ip()
-    domain_records = []
-
-    if DNS_RECORD_COMMENT_KEY is not None:
-        LOGGER.info(
-            "Using DNS_RECORD_COMMENT_KEY='%s' to find DNS records to update.",
-            DNS_RECORD_COMMENT_KEY,
-        )
-        domain_records = get_dns_records_by_comment(CF_ZONE_ID, DNS_RECORD_COMMENT_KEY)
-    else:
-        LOGGER.info(
-            "Using DOMAINS_FILE_PATH='%s' to find DNS records to update.",
-            DOMAINS_FILE_PATH,
-        )
-        domain_records = get_dns_records_by_name(
-            read_zones_from_file(DOMAINS_FILE_PATH, CF_ZONE_ID)
-        )
+    domain_records = get_all_dns_records()
 
     valid_domains = [x["name"] for x in domain_records if x is not None]
     LOGGER.info(
@@ -373,59 +442,9 @@ def check_and_update_dns():
                     "IP addresses are the same for %s. No update needed.", domain_name
                 )
 
-            if TYPE is not None:
-                if TYPE != record["type"] and TYPE in ["A", "AAAA", "CNAME"]:
-                    update_dns_record_type(record, TYPE)
-                if TYPE not in ["A", "AAAA", "CNAME"] and PROXIED is True:
-                    LOGGER.info(
-                        "Type settings are the same for %s. No update needed.",
-                        domain_name,
-                    )
-                else:
-                    LOGGER.info(
-                        "Type settings are the same for %s. No update needed.",
-                        domain_name,
-                    )
-            else:
-                LOGGER.error(
-                    "Environment variable %s is not defined.", nameof(TYPE)
-                )
-
-            if PROXIED is not None:
-                if record["proxiable"] is True and PROXIED != record["proxied"]:
-                    update_dns_record_proxy(record, PROXIED)
-                else:
-                    if record["proxiable"] is False and PROXIED is True:
-                        LOGGER.error(
-                            "Domain %s is not proxiable.", domain_name
-                        )
-                    if record["proxiable"] is True and PROXIED == record["proxied"]:
-                        LOGGER.info(
-                            "Proxy settings are the same for %s. No update needed.", domain_name
-                        )
-            else:
-                LOGGER.error(
-                    "Environment variable %s is not defined.", nameof(PROXIED)
-                )
-
-            if TTL is not None:
-                if TTL != record["ttl"] and PROXIED is False:
-                    update_dns_record_ttl(record, TTL)
-                else:
-                    if PROXIED is True:
-                        LOGGER.info(
-                            "TTL settings cannot be set for %s. Proxy status is set to True.",
-                            domain_name,
-                        )
-                    if TTL == record["ttl"]:
-                        LOGGER.info(
-                            "TTL settings are the same for %s. No update needed.",
-                            domain_name,
-                        )
-            else:
-                LOGGER.error(
-                    "Environment variable %s is not defined.", nameof(TTL)
-                )
+            check_and_update_dns_record_type(record, domain_name)
+            check_and_update_dns_record_proxy(record, domain_name)
+            check_and_update_dns_record_ttl(record, domain_name)
 
     else:
         LOGGER.error("Failed to retrieve public IP. Skipping check and update.")
