@@ -20,6 +20,7 @@ import os
 import json
 import requests
 import schedule
+from varname import nameof
 
 # Replace with your actual data
 CF_API_TOKEN = os.getenv("CF_API_TOKEN")
@@ -27,6 +28,9 @@ CF_ZONE_ID = os.getenv("CF_ZONE_ID")
 DNS_RECORD_COMMENT_KEY = os.getenv("DNS_RECORD_COMMENT_KEY")
 DOMAINS_FILE_PATH = os.getenv("DOMAINS_FILE_PATH")
 SCHEDULE_MINUTES = int(os.getenv("SCHEDULE_MINUTES", "60"))
+TTL = int(os.getenv("TTL"))
+PROXIED = os.getenv("PROXIED")
+TYPE = os.getenv("TYPE")
 
 # Define API endpoints
 BASE_URL = "https://api.cloudflare.com/client/v4/"
@@ -106,8 +110,8 @@ def get_dns_record(zone_id, domain_name):
     return None
 
 
-def update_dns_record(record, content):
-    """Update the DNS record"""
+def update_dns_record_content(record, content):
+    """Update the DNS record content"""
     headers = {
         "Authorization": "Bearer " + CF_API_TOKEN,
         "Content-Type": "application/json",
@@ -131,6 +135,87 @@ def update_dns_record(record, content):
         )
     else:
         LOGGER.error("Failed to update DNS record: %s", response.json())
+
+
+def update_dns_record_proxy(record, proxy):
+    """Update the DNS record proxy"""
+    headers = {
+        "Authorization": "Bearer " + CF_API_TOKEN,
+        "Content-Type": "application/json",
+    }
+
+    data = {"proxied": proxy}
+
+    response = requests.patch(
+        f"{BASE_URL}zones/{record['zone_id']}/dns_records/{record['id']}",
+        json=data,
+        headers=headers,
+        timeout=30,
+    )
+
+    if response.status_code == 200:
+        LOGGER.info(
+            "DNS record proxy updated successfully: %s (%s) -> %s",
+            record["name"],
+            record["type"],
+            proxy,
+        )
+    else:
+        LOGGER.error("Failed to update DNS record proxy: %s", response.json())
+
+
+def update_dns_record_type(record, record_type):
+    """Update the DNS record record_type"""
+    headers = {
+        "Authorization": "Bearer " + CF_API_TOKEN,
+        "Content-Type": "application/json",
+    }
+
+    data = {"type": record_type}
+
+    response = requests.patch(
+        f"{BASE_URL}zones/{record['zone_id']}/dns_records/{record['id']}",
+        json=data,
+        headers=headers,
+        timeout=30,
+    )
+
+    if response.status_code == 200:
+        LOGGER.info(
+            "DNS record type updated successfully: %s (%s) -> %s",
+            record["name"],
+            record["type"],
+            record_type,
+        )
+    else:
+        LOGGER.error("Failed to update DNS record type: %s", response.json())
+
+
+def update_dns_record_ttl(record, ttl):
+    """Update the DNS record ttl"""
+    headers = {
+        "Authorization": "Bearer " + CF_API_TOKEN,
+        "Content-Type": "application/json",
+    }
+
+    data = {"ttl": ttl}
+
+    response = requests.patch(
+        f"{BASE_URL}zones/{record['zone_id']}/dns_records/{record['id']}",
+        json=data,
+        headers=headers,
+        timeout=30,
+    )
+
+    if response.status_code == 200:
+        LOGGER.info(
+            "DNS record ttl updated successfully: %s (%s) -> %s",
+            record["name"],
+            record["type"],
+            ttl,
+        )
+    else:
+        LOGGER.error("Failed to update DNS record ttl: %s", response.json())
 
 
 def read_zones_from_file(json_file_path, zone_id):
@@ -282,11 +367,66 @@ def check_and_update_dns():
                 continue
 
             if public_ip != record["content"]:
-                update_dns_record(record, public_ip)
+                update_dns_record_content(record, public_ip)
             else:
                 LOGGER.info(
                     "IP addresses are the same for %s. No update needed.", domain_name
                 )
+
+            if TYPE is not None:
+                if TYPE != record["type"] and TYPE in ["A", "AAAA", "CNAME"]:
+                    update_dns_record_type(record, TYPE)
+                if TYPE not in ["A", "AAAA", "CNAME"] and PROXIED is True:
+                    LOGGER.info(
+                        "Type settings are the same for %s. No update needed.",
+                        domain_name,
+                    )
+                else:
+                    LOGGER.info(
+                        "Type settings are the same for %s. No update needed.",
+                        domain_name,
+                    )
+            else:
+                LOGGER.error(
+                    "Environment variable %s is not defined.", nameof(TYPE)
+                )
+
+            if PROXIED is not None:
+                if record["proxiable"] is True and PROXIED != record["proxied"]:
+                    update_dns_record_proxy(record, PROXIED)
+                else:
+                    if record["proxiable"] is False and PROXIED is True:
+                        LOGGER.error(
+                            "Domain %s is not proxiable.", domain_name
+                        )
+                    if record["proxiable"] is True and PROXIED == record["proxied"]:
+                        LOGGER.info(
+                            "Proxy settings are the same for %s. No update needed.", domain_name
+                        )
+            else:
+                LOGGER.error(
+                    "Environment variable %s is not defined.", nameof(PROXIED)
+                )
+
+            if TTL is not None:
+                if TTL != record["ttl"] and PROXIED is False:
+                    update_dns_record_ttl(record, TTL)
+                else:
+                    if PROXIED is True:
+                        LOGGER.info(
+                            "TTL settings cannot be set for %s. Proxy status is set to True.",
+                            domain_name,
+                        )
+                    if TTL == record["ttl"]:
+                        LOGGER.info(
+                            "TTL settings are the same for %s. No update needed.",
+                            domain_name,
+                        )
+            else:
+                LOGGER.error(
+                    "Environment variable %s is not defined.", nameof(TTL)
+                )
+
     else:
         LOGGER.error("Failed to retrieve public IP. Skipping check and update.")
 
